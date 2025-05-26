@@ -65,34 +65,33 @@ public class PulsarConstants {
     public static final String TOPIC_NAMES = "topicNames";
     public static final String TOPICS_PATTERN = "topicsPattern";
     public static final String SUBSCRIPTION_NAME = "subscriptionName";
-    public static final String SUBSCRIPTION_MODE = "subscriptionMode";
     public static final String SUBSCRIPTION_TYPE = "subscriptionType";
+    public static final String SUBSCRIPTION_TOPICS_MODE = "subscriptionTopicsMode";
     public static final String SUBSCRIPTION_INITIAL_POSITION = "subscriptionInitialPosition";
     public static final String PROCESSING_MODE = "processingMode";
-    public static final String SYNC = "SYNC";
-//    public static final String SUBSCRIPTION_TOPICS_MODE = "subscriptionTopicsMode";
-//    public static final String SUBSCRIPTION_PROPERTIES = "subscriptionProperties";
-//    public static final String ACK_TIMEOUT = "ackTimeout";
+
+
     public static final String ACK_TIMEOUT_MILLIS = "ackTimeoutMillis";
     public static final String NACK_REDELIVERY_DELAY = "nackRedeliveryDelay";
-//    public static final String ACK_TIMEOUT_TICK_TIME = "ackTimeoutTickTime";
     public static final String RECEIVER_QUEUE_SIZE = "receiverQueueSize";
-    public static final String CONSUMER_NAME = "consumerName";
-    public static final String PRIORITY_LEVEL = "priorityLevel";
     public static final String MAX_TOTAL_RECEIVER_QUEUE_SIZE_ACROSS_PARTITIONS = "maxTotalReceiverQueueSizeAcrossPartitions";
-    public static final String DLQ_MAX_REDELIVERY_COUNT = "dlqMaxRedeliverCount";
+
     public static final String DLQ_TOPIC = "dlqTopic";
+    public static final String DLQ_MAX_REDELIVERY_COUNT = "dlqMaxRedeliverCount";
+
     public static final String AUTO_ACK_OLDEST_CHUNKED_MESSAGE_ON_QUEUE_FULL = "autoAckOldestChunkedMessageOnQueueFull";
     public static final String MAX_PENDING_CHUNKED_MESSAGE = "maxPendingChunkedMessage";
     public static final String EXPIRY_TIME_OF_INCOMPLETE_CHUNKED_MESSAGE_MILLIS = "expiryTimeOfIncompleteChunkedMessageMillis";
-//    public static final String START_MESSAGE_ID = "startMessageId";
-//    public static final String START_MESSAGE_ID_INCLUSIVE = "startMessageIdInclusive";
+
     public static final String AUTO_UPDATE_PARTITIONS = "autoUpdatePartitions";
-//    public static final String AUTO_UPDATE_PARTITIONS_INTERVAL_SECONDS = "autoUpdatePartitionsIntervalSeconds";
+    public static final String AUTO_UPDATE_PARTITIONS_INTERVAL_SECONDS = "autoUpdatePartitionsIntervalSeconds";
     public static final String REPLICATE_SUBSCRIPTION_STATE = "replicateSubscriptionState";
     public static final String READ_COMPACTED = "readCompacted";
     public static final String CRYPTO_FAILURE_ACTION = "cryptoFailureAction";
-    public static final String PROPERTIES = "properties";
+
+
+    public static final String CONSUMER_NAME = "consumerName";
+    public static final String PRIORITY_LEVEL = "priorityLevel";
 
     public static final String BATCH_RECEIVE_ENABLED = "batchReceiveEnabled";
     public static final String BATCHING_MAX_MESSAGES = "batchingMaxMessages";
@@ -102,5 +101,9 @@ public class PulsarConstants {
 
 
     public static final String CONTENT_TYPE = "contentType";
+
+    public static final String SYNC = "SYNC";
+
+    public static final String PROPERTIES = "properties";
 
 }

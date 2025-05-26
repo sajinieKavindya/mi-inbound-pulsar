@@ -31,7 +31,6 @@ import org.wso2.integration.inbound.connection.PulsarConnectionSetup;
 import org.wso2.integration.inbound.pojo.ConnectionConfiguration;
 import org.wso2.integration.inbound.utils.PulsarConstants;
 import org.wso2.integration.inbound.utils.PulsarUtils;
-import scala.util.parsing.combinator.testing.Str;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -39,9 +38,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.SortedMap;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 public class PulsarMessageConsumer extends GenericPollingConsumer {
@@ -55,7 +58,7 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
     private String topicNames;
     private String topicsPattern;
     private String subscriptionName;
-    private RegexSubscriptionMode subscriptionMode;
+    private RegexSubscriptionMode subscriptionTopicsMode;
     private SubscriptionType subscriptionType;
     private SubscriptionInitialPosition subscriptionInitialPosition;
     private String consumerName;
@@ -77,6 +80,7 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
     private Long expiryTimeOfIncompleteChunkedMessageMillis;
 
     private Boolean autoUpdatePartitions;
+    private Integer autoUpdatePartitionsIntervalSeconds;
     private Boolean replicateSubscriptionState;
     private Boolean readCompacted;
     private String cryptoFailureAction;
@@ -94,8 +98,20 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
 
     private String contentType;
 
-    private static final int THREAD_POOL_SIZE = 10;
-    private final ExecutorService executor = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    // Thread pool for processing messages asynchronously
+    int corePoolSize = 4;       // minimum number of threads
+    int maxPoolSize = 8;        // maximum threads
+    int queueCapacity = 100;    // max number of tasks in the queue
+
+    ExecutorService boundedExecutor = new ThreadPoolExecutor(
+            corePoolSize,
+            maxPoolSize,
+            60L, TimeUnit.SECONDS,
+            new ArrayBlockingQueue<>(queueCapacity), // bounded queue
+            Executors.defaultThreadFactory(),
+            // Policy: what happens when queue is full and max threads are busy
+            new ThreadPoolExecutor.CallerRunsPolicy() // Runs task in calling thread
+    );
 
     public PulsarMessageConsumer(Properties properties, String name, SynapseEnvironment synapseEnvironment,
                                  long scanInterval, String injectingSeq, String onErrorSeq, boolean coordination,
@@ -135,7 +151,19 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
 
                 future.thenAccept(messages -> {
                     for (Message<String> msg : messages) {
-                        executor.submit(() -> processMessageAsync(msg));
+                        try {
+                            boundedExecutor.submit(() -> {
+                                try {
+                                    processMessageAsync(msg);
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                    consumer.negativeAcknowledge(msg);
+                                }
+                            });
+                        } catch (RejectedExecutionException ex) {
+                            System.err.println("Task rejected due to executor saturation");
+                            consumer.negativeAcknowledge(msg); // optional
+                        }
                     }
                 }).exceptionally(ex -> {
                     ex.printStackTrace();
@@ -154,7 +182,19 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
                 CompletableFuture<Message<String>> future = consumer.receiveAsync();
                 future.thenAccept(msg -> {
                     if (msg != null) {
-                        executor.submit(() -> processMessageAsync(msg));
+                        try {
+                            boundedExecutor.submit(() -> {
+                                try {
+                                    processMessageAsync(msg);
+                                } catch (Exception e) {
+                                    e.printStackTrace();
+                                    consumer.negativeAcknowledge(msg);
+                                }
+                            });
+                        } catch (RejectedExecutionException ex) {
+                            System.err.println("Task rejected due to executor saturation");
+                            consumer.negativeAcknowledge(msg); // optional
+                        }
                     }
                 });
             }
@@ -216,8 +256,8 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
             Pattern topicPattern = Pattern.compile(topicsPattern);
             consumerBuilder.topicsPattern(topicPattern);
 
-            if (subscriptionMode != null) {
-                consumerBuilder.subscriptionTopicsMode(subscriptionMode);
+            if (subscriptionTopicsMode != null) {
+                consumerBuilder.subscriptionTopicsMode(subscriptionTopicsMode);
             }
         } else {
             throw new SynapseException("Either topicNames or topicsPattern must be specified.");
@@ -302,6 +342,10 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
             consumerBuilder.autoUpdatePartitions(autoUpdatePartitions);
         }
 
+        if (autoUpdatePartitionsIntervalSeconds != null) {
+            consumerBuilder.autoUpdatePartitionsInterval(autoUpdatePartitionsIntervalSeconds, java.util.concurrent.TimeUnit.SECONDS);
+        }
+
         if (replicateSubscriptionState != null) {
             consumerBuilder.replicateSubscriptionState(replicateSubscriptionState);
         }
@@ -324,12 +368,12 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
         this.subscriptionName = properties.getProperty(PulsarConstants.SUBSCRIPTION_NAME);
 
 
-        String subscriptionModeString = properties.getProperty(PulsarConstants.SUBSCRIPTION_MODE);
+        String subscriptionModeString = properties.getProperty(PulsarConstants.SUBSCRIPTION_TOPICS_MODE);
         if (subscriptionModeString != null && !subscriptionModeString.isEmpty()) {
             try {
-                this.subscriptionMode = RegexSubscriptionMode.valueOf(subscriptionModeString);
+                this.subscriptionTopicsMode = RegexSubscriptionMode.valueOf(subscriptionModeString);
             } catch (IllegalArgumentException e) {
-                throw new SynapseException("Invalid subscription topics mode: " + subscriptionMode
+                throw new SynapseException("Invalid subscription topics mode: " + subscriptionTopicsMode
                         + ". Valid types are: " + Arrays.toString(RegexSubscriptionMode.values()), e);
             }
         }
@@ -411,6 +455,12 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
         String autoUpdatePartitionsString = properties.getProperty(PulsarConstants.AUTO_UPDATE_PARTITIONS);
         if (autoUpdatePartitionsString != null && !autoUpdatePartitionsString.isEmpty()) {
             this.autoUpdatePartitions = Boolean.parseBoolean(autoUpdatePartitionsString);
+        }
+
+        String autoUpdatePartitionsIntervalSecondsString = properties.getProperty(
+                PulsarConstants.AUTO_UPDATE_PARTITIONS_INTERVAL_SECONDS);
+        if (autoUpdatePartitionsIntervalSecondsString != null && !autoUpdatePartitionsIntervalSecondsString.isEmpty()) {
+            this.autoUpdatePartitionsIntervalSeconds = Integer.parseInt(autoUpdatePartitionsIntervalSecondsString);
         }
 
         String replicateSubscriptionStateStr = properties.getProperty(PulsarConstants.REPLICATE_SUBSCRIPTION_STATE);
