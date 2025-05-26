@@ -87,29 +87,20 @@ public class PulsarConstants {
     public static final String EXPIRY_TIME_OF_INCOMPLETE_CHUNKED_MESSAGE_MILLIS = "expiryTimeOfIncompleteChunkedMessageMillis";
 //    public static final String START_MESSAGE_ID = "startMessageId";
 //    public static final String START_MESSAGE_ID_INCLUSIVE = "startMessageIdInclusive";
-//    public static final String CONSUMER_EVENT_LISTENER = "consumerEventListener";
     public static final String AUTO_UPDATE_PARTITIONS = "autoUpdatePartitions";
 //    public static final String AUTO_UPDATE_PARTITIONS_INTERVAL_SECONDS = "autoUpdatePartitionsIntervalSeconds";
     public static final String REPLICATE_SUBSCRIPTION_STATE = "replicateSubscriptionState";
     public static final String READ_COMPACTED = "readCompacted";
-//    public static final String KEY_SHARED_POLICY = "keySharedPolicy";
-//    public static final String BATCH_INDEX_ACK_ENABLED = "batchIndexAckEnabled";
-//    public static final String CRYPTO_KEY_READER = "cryptoKeyReader";
     public static final String CRYPTO_FAILURE_ACTION = "cryptoFailureAction";
     public static final String PROPERTIES = "properties";
-//    public static final String INTERCEPTORS = "interceptors";
-//    public static final String SUBSCRIPTION_ROLE_PREFIX = "subscriptionRolePrefix";
-//    public static final String RESTART_LATEST_MESSAGE_ID = "restartLatestMessageId";
-//    public static final String RESTART_LATEST_MESSAGE_ID_INCLUSIVE = "restartLatestMessageIdInclusive";
-//    public static final String RESTART_LATEST_MESSAGE_ID_TIMEOUT = "restartLatestMessageIdTimeout";
-//    public static final String RESTART_LATEST_MESSAGE_ID_TIMEOUT_UNIT = "restartLatestMessageIdTimeoutUnit";
-//    public static final String RESTART_LATEST_MESSAGE_ID_RETRY_INTERVAL = "restartLatestMessageIdRetryInterval";
-//    public static final String RESTART_LATEST_MESSAGE_ID_RETRY_INTERVAL_UNIT = "restartLatestMessageIdRetryIntervalUnit";
 
-    public static final String BATCHING_ENABLED = "batchingEnabled";
+    public static final String BATCH_RECEIVE_ENABLED = "batchReceiveEnabled";
     public static final String BATCHING_MAX_MESSAGES = "batchingMaxMessages";
     public static final String BATCHING_MAX_BYTES = "batchingMaxBytes";
     public static final String BATCHING_TIMEOUT = "batchingTimeout";
     public static final String BATCH_INDEX_ACK_ENABLED = "batchIndexAckEnabled";
+
+
+    public static final String CONTENT_TYPE = "contentType";
 
 }

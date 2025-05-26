@@ -22,7 +22,6 @@ import org.apache.pulsar.client.api.RegexSubscriptionMode;
 import org.apache.pulsar.client.api.SubscriptionInitialPosition;
 import org.apache.pulsar.client.api.SubscriptionType;
 import org.apache.synapse.MessageContext;
-import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.SynapseException;
 import org.apache.synapse.core.SynapseEnvironment;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
@@ -30,10 +29,9 @@ import org.apache.synapse.mediators.base.SequenceMediator;
 import org.wso2.carbon.inbound.endpoint.protocol.generic.GenericPollingConsumer;
 import org.wso2.integration.inbound.connection.PulsarConnectionSetup;
 import org.wso2.integration.inbound.pojo.ConnectionConfiguration;
-import org.wso2.integration.inbound.pojo.JWTAuthConfig;
-import org.wso2.integration.inbound.pojo.PulsarConnectionConfig;
-import org.wso2.integration.inbound.pojo.PulsarSecureConnectionConfig;
 import org.wso2.integration.inbound.utils.PulsarConstants;
+import org.wso2.integration.inbound.utils.PulsarUtils;
+import scala.util.parsing.combinator.testing.Str;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -41,7 +39,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.SortedMap;
-import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -58,36 +55,42 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
     private String topicNames;
     private String topicsPattern;
     private String subscriptionName;
-    private String subscriptionMode;
-    private String subscriptionType;
-    private String subscriptionInitialPosition;
-    private String processingMode;
-    private long ackTimeoutMillis;
-    private long nackRedeliveryDelayMillis;
-    private int receiverQueueSize;
+    private RegexSubscriptionMode subscriptionMode;
+    private SubscriptionType subscriptionType;
+    private SubscriptionInitialPosition subscriptionInitialPosition;
     private String consumerName;
-    private int priorityLevel;
-    private int maxTotalReceiverQueueSizeAcrossPartitions;
+
+
+    private Long ackTimeoutMillis;
+    private Long nackRedeliveryDelayMillis;
+
+    private Integer priorityLevel;
+    private Integer receiverQueueSize;
+    private Integer maxTotalReceiverQueueSizeAcrossPartitions;
 
     private String dlqTopic;
-    private int deadLetterMaxRedeliverCount;
-    // Configuration for chunked messages
-    private boolean autoAckOldestChunkedMessageOnQueueFull;
-    private int maxPendingChunkedMessage;
-    private long expiryTimeOfIncompleteChunkedMessageMillis;
+    private Integer dlqMaxRedeliverCount;
 
-    private boolean autoUpdatePartitions;
-    private boolean replicateSubscriptionState;
-    private boolean readCompacted;
+    // Configuration for chunked messages
+    private Boolean autoAckOldestChunkedMessageOnQueueFull;
+    private Integer maxPendingChunkedMessage;
+    private Long expiryTimeOfIncompleteChunkedMessageMillis;
+
+    private Boolean autoUpdatePartitions;
+    private Boolean replicateSubscriptionState;
+    private Boolean readCompacted;
     private String cryptoFailureAction;
     private SortedMap<String, String> properties;
 
-    private boolean syncReceive;
-    private boolean batchingEnabled;
-    private int batchingMaxMessages;
-    private int batchingMaxBytes;
-    private int batchingTimeout;
-    private boolean batchIndexAcknowledgmentEnabled;
+    private String processingMode;
+    private Boolean syncReceive;
+
+    // Batching related configurations
+    private Boolean batchReceiveEnabled;
+    private Integer batchingMaxMessages;
+    private Integer batchingMaxBytes;
+    private Integer batchingTimeout;
+    private Boolean batchIndexAcknowledgmentEnabled;
 
     private String contentType;
 
@@ -99,7 +102,7 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
                                  boolean sequential) {
 
         super(properties, name, synapseEnvironment, scanInterval, injectingSeq, onErrorSeq, coordination, sequential);
-        configuration = getConnectionConfigFromProperties(properties);
+        configuration = PulsarUtils.getConnectionConfigFromProperties(properties);
         getConsumerConfigFromProperties(properties);
     }
 
@@ -120,7 +123,7 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
     }
 
     private void consumeMessages() throws PulsarClientException {
-        if (batchingEnabled) {
+        if (batchReceiveEnabled) {
             if (syncReceive) {
                 // Synchronous batch receive
                 Messages<String> messages = consumer.batchReceive();  // Synchronous call
@@ -159,7 +162,7 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
     }
 
     private void processMessageAsync(Message<String> msg) {
-        MessageContext msgCtx = populateMessageContext(msg);
+        MessageContext msgCtx = PulsarUtils.populateMessageContext(msg, synapseEnvironment);
 
         boolean isConsumed = injectMessage(msg.getValue(), contentType, msgCtx);
 
@@ -173,7 +176,7 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
     }
 
     private void processMessage(Message<String> msg) throws PulsarClientException {
-        MessageContext msgCtx = populateMessageContext(msg);
+        MessageContext msgCtx = PulsarUtils.populateMessageContext(msg, synapseEnvironment);
 
         boolean isConsumed = injectMessage(msg.getValue(), contentType, msgCtx);
 
@@ -213,59 +216,57 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
             Pattern topicPattern = Pattern.compile(topicsPattern);
             consumerBuilder.topicsPattern(topicPattern);
 
-            if (subscriptionMode != null && !subscriptionMode.isEmpty()) {
-                try {
-                    consumerBuilder.subscriptionTopicsMode(RegexSubscriptionMode.valueOf(subscriptionMode));
-                } catch (IllegalArgumentException e) {
-                    throw new SynapseException("Invalid subscription topics mode: " + subscriptionMode, e);
-                }
+            if (subscriptionMode != null) {
+                consumerBuilder.subscriptionTopicsMode(subscriptionMode);
             }
         } else {
             throw new SynapseException("Either topicNames or topicsPattern must be specified.");
         }
 
-        if (subscriptionName != null) {
+        if (subscriptionName != null && !subscriptionName.isEmpty()) {
             consumerBuilder.subscriptionName(subscriptionName);
         }
+
         if (subscriptionType != null) {
-            try {
-                consumerBuilder.subscriptionType(SubscriptionType.valueOf(subscriptionType));
-            } catch (IllegalArgumentException e) {
-                throw new SynapseException("Invalid subscription type: " + subscriptionType, e);
-            }
+            consumerBuilder.subscriptionType(subscriptionType);
         }
+
         if (subscriptionInitialPosition != null) {
-            try {
-                consumerBuilder.subscriptionInitialPosition(SubscriptionInitialPosition.valueOf(subscriptionInitialPosition));
-            } catch (IllegalArgumentException e) {
-                throw new SynapseException("Invalid subscription initial position: " + subscriptionInitialPosition, e);
-            }
+            consumerBuilder.subscriptionInitialPosition(subscriptionInitialPosition);
         }
-        if (ackTimeoutMillis > 0) {
-            consumerBuilder.ackTimeout(ackTimeoutMillis, java.util.concurrent.TimeUnit.MILLISECONDS);
-        }
-        if (consumerName != null) {
+
+        if (consumerName != null && !consumerName.isEmpty()) {
             consumerBuilder.consumerName(consumerName);
         }
-        if (priorityLevel > 0) {
+
+        if (ackTimeoutMillis != null) {
+            consumerBuilder.ackTimeout(ackTimeoutMillis, java.util.concurrent.TimeUnit.MILLISECONDS);
+        }
+
+        if (priorityLevel != null) {
             consumerBuilder.priorityLevel(priorityLevel);
         }
-        if (receiverQueueSize > 0) {
+
+        if (receiverQueueSize != null) {
             consumerBuilder.receiverQueueSize(receiverQueueSize);
         }
-        if (maxTotalReceiverQueueSizeAcrossPartitions > 0) {
+
+        if (maxTotalReceiverQueueSizeAcrossPartitions != null) {
             consumerBuilder.maxTotalReceiverQueueSizeAcrossPartitions(maxTotalReceiverQueueSizeAcrossPartitions);
         }
 
         if (dlqTopic != null) {
+            if (dlqMaxRedeliverCount == null) {
+                dlqMaxRedeliverCount = 5;
+            }
             DeadLetterPolicy deadLetterPolicy = DeadLetterPolicy.builder()
-                    .maxRedeliverCount(deadLetterMaxRedeliverCount)                      // Max retries before dead-lettering
+                    .maxRedeliverCount(dlqMaxRedeliverCount)  // Max retries before dead-lettering
                     .deadLetterTopic(dlqTopic)   // Optional: custom DLT name
                     .build();
             consumerBuilder.deadLetterPolicy(deadLetterPolicy);
         }
 
-        if (batchingEnabled) {
+        if (batchReceiveEnabled) {
             if (batchingMaxMessages <= 0 && batchingMaxBytes <= 0 && batchingTimeout <= 0) {
                 throw new SynapseException("At least one of maxNumMessages, maxNumBytes, timeout must be specified.");
             }
@@ -284,28 +285,28 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
             consumerBuilder.enableBatchIndexAcknowledgment(batchIndexAcknowledgmentEnabled);
 
             consumerBuilder.batchReceivePolicy(batchReceivePolicyBuilder.build());
+        } else{
+            if (autoAckOldestChunkedMessageOnQueueFull != null) {
+                consumerBuilder.autoAckOldestChunkedMessageOnQueueFull(autoAckOldestChunkedMessageOnQueueFull);
+            }
+            if (expiryTimeOfIncompleteChunkedMessageMillis > 0) {
+                consumerBuilder.expireTimeOfIncompleteChunkedMessage(expiryTimeOfIncompleteChunkedMessageMillis,
+                        java.util.concurrent.TimeUnit.MILLISECONDS);
+            }
+            if (maxPendingChunkedMessage > 0) {
+                consumerBuilder.maxPendingChunkedMessage(maxPendingChunkedMessage);
+            }
         }
 
-        if (autoAckOldestChunkedMessageOnQueueFull) {
-            consumerBuilder.autoAckOldestChunkedMessageOnQueueFull(autoAckOldestChunkedMessageOnQueueFull);
-        }
-        if (expiryTimeOfIncompleteChunkedMessageMillis > 0) {
-            consumerBuilder.expireTimeOfIncompleteChunkedMessage(expiryTimeOfIncompleteChunkedMessageMillis,
-                    java.util.concurrent.TimeUnit.MILLISECONDS);
-        }
-        if (maxPendingChunkedMessage > 0) {
-            consumerBuilder.maxPendingChunkedMessage(maxPendingChunkedMessage);
-        }
-
-        if (autoUpdatePartitions) {
+        if (autoUpdatePartitions != null) {
             consumerBuilder.autoUpdatePartitions(autoUpdatePartitions);
         }
 
-        if (replicateSubscriptionState) {
+        if (replicateSubscriptionState != null) {
             consumerBuilder.replicateSubscriptionState(replicateSubscriptionState);
         }
 
-        if (readCompacted) {
+        if (readCompacted != null) {
             consumerBuilder.readCompacted(readCompacted);
         }
 
@@ -316,168 +317,138 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
         return consumerBuilder.subscribe();
     }
 
-    private ConnectionConfiguration getConnectionConfigFromProperties(Properties properties) {
-        ConnectionConfiguration configuration = new ConnectionConfiguration();
-        configuration.setConnectionName(properties.getProperty(PulsarConstants.CONNECTION_NAME));
-        configuration.setUseTlsEncryption(properties.getProperty(PulsarConstants.USE_TLS),
-                properties.getProperty(PulsarConstants.SERVICE_URL));
-        if (configuration.getUseTlsEncryption()) {
-            PulsarSecureConnectionConfig secureConfig = getPulsarSecureConnectionConfigFromContext(properties);
-            configuration.setConnectionConfig(secureConfig);
-        } else {
-            PulsarConnectionConfig connectionConfig = getPulsarConnectionConfigFromContext(properties, null);
-            configuration.setConnectionConfig(connectionConfig);
-        }
-
-        String authType = properties.getProperty(PulsarConstants.AUTH_TYPE);
-        if (authType != null) {
-
-            switch (authType) {
-                case PulsarConstants.AUTH_JWT:
-                    JWTAuthConfig jwtAuthConfig = new JWTAuthConfig();
-                    jwtAuthConfig.setToken(properties.getProperty(PulsarConstants.TOKEN));
-                    configuration.setAuthConfig(jwtAuthConfig);
-                    break;
-                case PulsarConstants.AUTH_OAUTH2:
-                    // Handle OAuth2 authentication
-                    break;
-                case PulsarConstants.AUTH_TLS:
-                    // Handle TLS authentication
-                    break;
-                case PulsarConstants.AUTH_NONE:
-                    // Handle no authentication
-                    break;
-                default:
-                    throw new SynapseException("Unsupported authentication type: " + authType);
-            }
-        }
-
-        return configuration;
-    }
-
-    private PulsarConnectionConfig getPulsarConnectionConfigFromContext(Properties properties,
-                                                                        PulsarConnectionConfig config)
-            throws SynapseException {
-
-        if (config == null) {
-            config = new PulsarConnectionConfig();
-        }
-
-        config.setServiceUrl(properties.getProperty(PulsarConstants.SERVICE_URL));
-        config.setOperationTimeoutSeconds(properties.getProperty(PulsarConstants.OPERATION_TIMEOUT_SECONDS));
-        config.setStatsIntervalSeconds(properties.getProperty(PulsarConstants.STATS_INTERVAL_SECONDS));
-        config.setNumIoThreads(properties.getProperty(PulsarConstants.NUM_IO_THREADS));
-        config.setNumListenerThreads(properties.getProperty(PulsarConstants.NUM_LISTENER_THREADS));
-        config.setUseTcpNoDelay(properties.getProperty(PulsarConstants.USE_TCP_NO_DELAY));
-        config.setRequestTimeoutMs(properties.getProperty(PulsarConstants.REQUEST_TIMEOUT_MS));
-        config.setMaxLookupRequest(properties.getProperty(PulsarConstants.MAX_LOOKUP_REQUESTS));
-        config.setKeepAliveIntervalSeconds(properties.getProperty(PulsarConstants.KEEP_ALIVE_INTERVAL_SECONDS));
-        config.setMaxBackoffIntervalNanos(properties.getProperty(PulsarConstants.MAX_BACKOFF_INTERVAL_NANOS));
-        config.setConcurrentLookupRequest(properties.getProperty(PulsarConstants.CONCURRENT_LOOKUP_REQUEST));
-        config.setConnectionMaxIdleSeconds(properties.getProperty(PulsarConstants.CONNECTION_MAX_IDLE_SECONDS));
-        config.setConnectionTimeoutMs(properties.getProperty(PulsarConstants.CONNECTION_TIMEOUT_MS));
-        config.setConnectionsPerBroker(properties.getProperty(PulsarConstants.CONNECTIONS_PER_BROKER));
-        config.setEnableBusyWait(properties.getProperty(PulsarConstants.ENABLE_BUSY_WAIT));
-        config.setEnableTransaction(properties.getProperty(PulsarConstants.ENABLE_TRANSACTION));
-        config.setInitialBackoffIntervalNanos(properties.getProperty(PulsarConstants.INITIAL_BACKOFF_INTERVAL_NANOS));
-        config.setListenerName(properties.getProperty(PulsarConstants.LISTENER_NAME));
-        config.setLookupTimeoutMs(properties.getProperty(PulsarConstants.LOOKUP_TIMEOUT_MS));
-        config.setMaxLookupRedirects(properties.getProperty(PulsarConstants.MAX_LOOKUP_REDIRECTS));
-        config.setMaxLookupRequest(properties.getProperty(PulsarConstants.MAX_LOOKUP_REQUEST));
-        config.setMaxNumberOfRejectedRequestPerConnection(properties.getProperty(PulsarConstants.MAX_NUMBER_OF_REJECTED_REQUEST_PER_CONNECTION));
-        config.setMemoryLimitBytes(properties.getProperty(PulsarConstants.MEMORY_LIMIT_BYTES));
-
-        return config;
-    }
-
-    private PulsarSecureConnectionConfig getPulsarSecureConnectionConfigFromContext(Properties properties)
-            throws SynapseException {
-        PulsarSecureConnectionConfig config = new PulsarSecureConnectionConfig();
-
-        getPulsarConnectionConfigFromContext(properties, config);
-        config.setUseTls(properties.getProperty(PulsarConstants.USE_TLS));
-        config.setTlsAllowInsecureConnection(properties.getProperty(PulsarConstants.TLS_ALLOW_INSECURE_CONNECTION));
-        config.setEnableTlsHostnameVerification(properties.getProperty(PulsarConstants.TLS_HOSTNAME_VERIFICATION_ENABLE));
-        config.setTlsTrustCertsFilePath(properties.getProperty(PulsarConstants.TLS_TRUST_CERTS_FILE_PATH));
-        config.setTlsProtocols(properties.getProperty(PulsarConstants.TLS_PROTOCOLS));
-        config.setTlsCiphers(properties.getProperty(PulsarConstants.TLS_CIPHERS));
-        config.setUseKeyStoreTls(properties.getProperty(PulsarConstants.USE_KEY_STORE_TLS));
-        config.setTlsTrustStorePath(properties.getProperty(PulsarConstants.TLS_TRUST_STORE_PATH));
-        config.setTlsTrustStorePassword(properties.getProperty(PulsarConstants.TLS_TRUST_STORE_PASSWORD));
-        config.setTlsTrustStoreType(properties.getProperty(PulsarConstants.TLS_TRUST_STORE_TYPE));
-        config.setAutoCertRefreshSeconds(properties.getProperty(PulsarConstants.AUTO_CERT_REFRESH_SECONDS));
-
-        return config;
-    }
-
     private void getConsumerConfigFromProperties(Properties properties) {
 
         this.topicNames = properties.getProperty(PulsarConstants.TOPIC_NAMES);
         this.topicsPattern = properties.getProperty(PulsarConstants.TOPICS_PATTERN);
         this.subscriptionName = properties.getProperty(PulsarConstants.SUBSCRIPTION_NAME);
-        this.subscriptionMode = properties.getProperty(PulsarConstants.SUBSCRIPTION_MODE);
-        this.subscriptionType = properties.getProperty(PulsarConstants.SUBSCRIPTION_TYPE);
-        this.subscriptionInitialPosition = properties.getProperty(PulsarConstants.SUBSCRIPTION_INITIAL_POSITION);
-        this.ackTimeoutMillis = Long.parseLong(properties.getProperty(PulsarConstants.ACK_TIMEOUT_MILLIS));
-        this.nackRedeliveryDelayMillis = Long.parseLong(properties.getProperty(PulsarConstants.NACK_REDELIVERY_DELAY));
-        this.receiverQueueSize = Integer.parseInt(properties.getProperty(PulsarConstants.RECEIVER_QUEUE_SIZE));
+
+
+        String subscriptionModeString = properties.getProperty(PulsarConstants.SUBSCRIPTION_MODE);
+        if (subscriptionModeString != null && !subscriptionModeString.isEmpty()) {
+            try {
+                this.subscriptionMode = RegexSubscriptionMode.valueOf(subscriptionModeString);
+            } catch (IllegalArgumentException e) {
+                throw new SynapseException("Invalid subscription topics mode: " + subscriptionMode
+                        + ". Valid types are: " + Arrays.toString(RegexSubscriptionMode.values()), e);
+            }
+        }
+
+        String subscriptionTypeString = properties.getProperty(PulsarConstants.SUBSCRIPTION_TYPE);
+        if (subscriptionTypeString != null && !subscriptionTypeString.isEmpty()) {
+            try {
+                this.subscriptionType = SubscriptionType.valueOf(subscriptionTypeString);
+            } catch (IllegalArgumentException e) {
+                throw new SynapseException("Invalid subscription type: " + subscriptionType
+                        + ". Valid types are: " + Arrays.toString(SubscriptionType.values()), e);
+            }
+        }
+
+
+        String subscriptionInitialPositionString = properties.getProperty(PulsarConstants.SUBSCRIPTION_INITIAL_POSITION);
+        if (subscriptionInitialPositionString != null && !subscriptionInitialPositionString.isEmpty()) {
+            try {
+                this.subscriptionInitialPosition = SubscriptionInitialPosition.valueOf(subscriptionInitialPositionString);
+            } catch (IllegalArgumentException e) {
+                throw new SynapseException("Invalid subscription initial position: " + subscriptionInitialPosition
+                        + ". Valid types are: " + Arrays.toString(SubscriptionInitialPosition.values()), e);
+            }
+        }
+
         this.consumerName = properties.getProperty(PulsarConstants.CONSUMER_NAME);
-        this.priorityLevel = Integer.parseInt(properties.getProperty(PulsarConstants.PRIORITY_LEVEL));
-        this.maxTotalReceiverQueueSizeAcrossPartitions = Integer.parseInt(
-                properties.getProperty(PulsarConstants.MAX_TOTAL_RECEIVER_QUEUE_SIZE_ACROSS_PARTITIONS));
-        this.deadLetterMaxRedeliverCount = Integer.parseInt(properties.getProperty(PulsarConstants.DLQ_MAX_REDELIVERY_COUNT, "5"));
+
+
+        String ackTimeoutMillisString = properties.getProperty(PulsarConstants.ACK_TIMEOUT_MILLIS);
+        if (ackTimeoutMillisString != null && !ackTimeoutMillisString.isEmpty()) {
+            this.ackTimeoutMillis = Long.parseLong(ackTimeoutMillisString);
+        }
+
+        String nackRedeliveryDelayString = properties.getProperty(PulsarConstants.NACK_REDELIVERY_DELAY);
+        if (nackRedeliveryDelayString != null && !nackRedeliveryDelayString.isEmpty()) {
+            this.nackRedeliveryDelayMillis = Long.parseLong(nackRedeliveryDelayString);
+        }
+
+        String receiverQueueSizeString = properties.getProperty(PulsarConstants.RECEIVER_QUEUE_SIZE);
+        if (receiverQueueSizeString != null && !receiverQueueSizeString.isEmpty()) {
+            this.receiverQueueSize = Integer.parseInt(receiverQueueSizeString);
+        }
+
+        String priorityLevelString = properties.getProperty(PulsarConstants.PRIORITY_LEVEL);
+        if (priorityLevelString != null && !priorityLevelString.isEmpty()) {
+            this.priorityLevel = Integer.parseInt(priorityLevelString);
+        }
+
+        String maxTotalReceiverQueueSizeAcrossPartitionsString = properties.getProperty(
+                PulsarConstants.MAX_TOTAL_RECEIVER_QUEUE_SIZE_ACROSS_PARTITIONS);
+        if (maxTotalReceiverQueueSizeAcrossPartitionsString != null && !maxTotalReceiverQueueSizeAcrossPartitionsString.isEmpty()) {
+            this.maxTotalReceiverQueueSizeAcrossPartitions = Integer.parseInt(maxTotalReceiverQueueSizeAcrossPartitionsString);
+        }
+
+        String dlqMaxRedeliverCountString = properties.getProperty(PulsarConstants.DLQ_MAX_REDELIVERY_COUNT);
+        if (dlqMaxRedeliverCountString != null && !dlqMaxRedeliverCountString.isEmpty()) {
+            this.dlqMaxRedeliverCount = Integer.parseInt(dlqMaxRedeliverCountString);
+        }
+
         this.dlqTopic = properties.getProperty(PulsarConstants.DLQ_TOPIC);
-        this.autoAckOldestChunkedMessageOnQueueFull = Boolean.parseBoolean(
-                properties.getProperty(PulsarConstants.AUTO_ACK_OLDEST_CHUNKED_MESSAGE_ON_QUEUE_FULL));
-        this.maxPendingChunkedMessage = Integer.parseInt(
-                properties.getProperty(PulsarConstants.MAX_PENDING_CHUNKED_MESSAGE));
-        this.expiryTimeOfIncompleteChunkedMessageMillis = Long.parseLong(
-                properties.getProperty(PulsarConstants.EXPIRY_TIME_OF_INCOMPLETE_CHUNKED_MESSAGE_MILLIS));
-        this.autoUpdatePartitions = Boolean.parseBoolean(
-                properties.getProperty(PulsarConstants.AUTO_UPDATE_PARTITIONS));
-        this.replicateSubscriptionState = Boolean.parseBoolean(
-                properties.getProperty(PulsarConstants.REPLICATE_SUBSCRIPTION_STATE));
-        this.readCompacted = Boolean.parseBoolean(properties.getProperty(PulsarConstants.READ_COMPACTED));
+
+        String autoAckOldestChunkedMessageOnQueueFullString = properties.getProperty(
+                PulsarConstants.AUTO_ACK_OLDEST_CHUNKED_MESSAGE_ON_QUEUE_FULL);
+        if (autoAckOldestChunkedMessageOnQueueFullString != null && !autoAckOldestChunkedMessageOnQueueFullString.isEmpty()) {
+            this.autoAckOldestChunkedMessageOnQueueFull = Boolean.parseBoolean(autoAckOldestChunkedMessageOnQueueFullString);
+        }
+
+        String maxPendingChunkedMessageString = properties.getProperty(PulsarConstants.MAX_PENDING_CHUNKED_MESSAGE);
+        if (maxPendingChunkedMessageString != null && !maxPendingChunkedMessageString.isEmpty()) {
+            this.maxPendingChunkedMessage = Integer.parseInt(maxPendingChunkedMessageString);
+        }
+
+        String expiryTimeOfIncompleteChunkedMessageMillisString = properties.getProperty(
+                PulsarConstants.EXPIRY_TIME_OF_INCOMPLETE_CHUNKED_MESSAGE_MILLIS);
+        if (expiryTimeOfIncompleteChunkedMessageMillisString != null && !expiryTimeOfIncompleteChunkedMessageMillisString.isEmpty()) {
+            this.expiryTimeOfIncompleteChunkedMessageMillis = Long.parseLong(expiryTimeOfIncompleteChunkedMessageMillisString);
+        }
+
+        String autoUpdatePartitionsString = properties.getProperty(PulsarConstants.AUTO_UPDATE_PARTITIONS);
+        if (autoUpdatePartitionsString != null && !autoUpdatePartitionsString.isEmpty()) {
+            this.autoUpdatePartitions = Boolean.parseBoolean(autoUpdatePartitionsString);
+        }
+
+        String replicateSubscriptionStateStr = properties.getProperty(PulsarConstants.REPLICATE_SUBSCRIPTION_STATE);
+        this.replicateSubscriptionState = replicateSubscriptionStateStr != null && !replicateSubscriptionStateStr.isEmpty()
+                && Boolean.parseBoolean(replicateSubscriptionStateStr);
+
+        String readCompactedStr = properties.getProperty(PulsarConstants.READ_COMPACTED);
+        this.readCompacted = readCompactedStr != null && !readCompactedStr.isEmpty()
+                && Boolean.parseBoolean(readCompactedStr);
+
         this.cryptoFailureAction = properties.getProperty(PulsarConstants.CRYPTO_FAILURE_ACTION);
-        this.batchingEnabled = Boolean.parseBoolean(properties.getProperty(PulsarConstants.BATCHING_ENABLED));
-        this.batchingMaxMessages = Integer.parseInt(properties.getProperty(PulsarConstants.BATCHING_MAX_MESSAGES));
-        this.batchingMaxBytes = Integer.parseInt(properties.getProperty(PulsarConstants.BATCHING_MAX_BYTES));
-        this.batchingTimeout = Integer.parseInt(properties.getProperty(PulsarConstants.BATCHING_TIMEOUT));
-        this.batchIndexAcknowledgmentEnabled = Boolean.parseBoolean(
-                properties.getProperty(PulsarConstants.BATCH_INDEX_ACK_ENABLED));
+
+        String batchReceiveEnabledStr = properties.getProperty(PulsarConstants.BATCH_RECEIVE_ENABLED);
+        this.batchReceiveEnabled = batchReceiveEnabledStr != null && !batchReceiveEnabledStr.isEmpty()
+                && Boolean.parseBoolean(batchReceiveEnabledStr);
+
+        String batchingMaxMessagesStr = properties.getProperty(PulsarConstants.BATCHING_MAX_MESSAGES);
+        this.batchingMaxMessages = batchingMaxMessagesStr != null && !batchingMaxMessagesStr.isEmpty()
+                ? Integer.parseInt(batchingMaxMessagesStr) : 0;
+
+        String batchingMaxBytesStr = properties.getProperty(PulsarConstants.BATCHING_MAX_BYTES);
+        this.batchingMaxBytes = batchingMaxBytesStr != null && !batchingMaxBytesStr.isEmpty()
+                ? Integer.parseInt(batchingMaxBytesStr) : 0;
+
+        String batchingTimeoutStr = properties.getProperty(PulsarConstants.BATCHING_TIMEOUT);
+        this.batchingTimeout = batchingTimeoutStr != null && !batchingTimeoutStr.isEmpty()
+                ? Integer.parseInt(batchingTimeoutStr) : 0;
+
+        String batchIndexAckEnabledStr = properties.getProperty(PulsarConstants.BATCH_INDEX_ACK_ENABLED);
+        this.batchIndexAcknowledgmentEnabled = batchIndexAckEnabledStr != null && !batchIndexAckEnabledStr.isEmpty()
+                && Boolean.parseBoolean(batchIndexAckEnabledStr);
+
         this.processingMode = properties.getProperty(PulsarConstants.PROCESSING_MODE);
-        this.syncReceive = PulsarConstants.SYNC.equalsIgnoreCase(properties.getProperty(PulsarConstants.PROCESSING_MODE));
-        this.contentType = properties.getProperty("contentType");
 
-    }
+        this.syncReceive = PulsarConstants.SYNC.equalsIgnoreCase(processingMode);
 
-    /**
-     * Set the Kafka Records to a MessageContext
-     *
-     * @return MessageContext A message context with the record header values
-     */
-    private MessageContext populateMessageContext(Message<String> msg) {
-        MessageContext msgCtx = createMessageContext();
-        msgCtx.setProperty("topic", msg.getTopicName());
-        msgCtx.setProperty("msgId", msg.getMessageId());
-        msgCtx.setProperty("value", msg.getValue());
-        msgCtx.setProperty("key", msg.getKey());
-        msgCtx.setProperty("redeliveryCount", msg.getRedeliveryCount());
-        msgCtx.setProperty("properties", msg.getProperties());
+        this.contentType = properties.getProperty(PulsarConstants.CONTENT_TYPE);
 
-        return msgCtx;
-    }
-
-    /**
-     * Create the message context.
-     */
-    private MessageContext createMessageContext() {
-
-        MessageContext msgCtx = this.synapseEnvironment.createMessageContext();
-        org.apache.axis2.context.MessageContext axis2MsgCtx = ((Axis2MessageContext) msgCtx).getAxis2MessageContext();
-        axis2MsgCtx.setServerSide(true);
-        axis2MsgCtx.setMessageID(String.valueOf(UUID.randomUUID()));
-        return msgCtx;
     }
 
     private boolean injectMessage(String strMessage, String contentType, MessageContext msgCtx) {
