@@ -98,17 +98,6 @@
           {
             "type": "attribute",
             "value": {
-              "name": "sequential",
-              "displayName": "Execute sequentially",
-              "inputType": "boolean",
-              "defaultValue": true,
-              "required": "false",
-              "helpTip": "The behaviour when executing the given sequence."
-            }
-          },
-          {
-            "type": "attribute",
-            "value": {
               "name": "coordination",
               "displayName": "Coordination",
               "inputType": "boolean",
@@ -126,64 +115,27 @@
         "groupName": "Pulsar Connection",
         "elements": [
           {
-            "type": "attributeGroup",
+            "type": "attribute",
             "value": {
-              "groupName": "General",
-              "elements": [
-                {
-                  "type": "attribute",
-                  "value": {
-                    "name": "serviceUrl",
-                    "displayName": "Broker URL",
-                    "inputType": "stringOrExpression",
-                    "required": "true",
-                    "defaultValue": "pulsar+ssl://",
-                    "helpTip": "The Pulsar service URL to connect to (e.g., pulsar://localhost:6650)."
-                  }
-                }
-              ]
+              "name": "useTLS",
+              "displayName": "Enable TLS",
+              "inputType": "boolean",
+              "defaultValue": "false",
+              "required": "true",
+              "helpTip": "Enable TLS to secure the connection between the client and Pulsar broker."
             }
           },
           {
-            "type": "attributeGroup",
+            "type": "attribute",
             "value": {
-              "groupName": "Authorization",
-              "isCollapsed": true,
-              "elements": [
-                {
-                  "type": "attribute",
-                  "value": {
-                    "name": "authorizationType",
-                    "displayName": "Authorization Type",
-                    "inputType": "combo",
-                    "defaultValue": "None",
-                    "required": "false",
-                    "helpTip": "The authorization mechanism to use for authenticating with Pulsar. Supported values: None, JWT, TLS, OAuth2.",
-                    "comboValues": [
-                      "None",
-                      "JWT",
-                      "TLS",
-                      "OAuth2"
-                    ]
-                  }
-                },
-                {
-                  "type": "attribute",
-                  "value": {
-                    "name": "token",
-                    "displayName": "JWT Token",
-                    "inputType": "stringOrExpression",
-                    "defaultValue": "",
-                    "required": "false",
-                    "helpTip": "The JSON Web Token (JWT) used for authenticating with the Pulsar broker.",
-                    "enableCondition": [
-                      {
-                        "authorizationType": "JWT"
-                      }
-                    ]
-                  }
-                }
-              ]
+              "name": "serviceUrl",
+              "displayName": "Broker URL",
+              "inputType": "stringOrExpression",
+              "required": "true",
+              "defaultValue": "",
+              "matchPattern": "^pulsar(\\+ssl)?://",
+              "placeholder": "pulsar://",
+              "helpTip": "The Pulsar service URL to connect to (e.g., pulsar://localhost:6650)."
             }
           },
           {
@@ -348,6 +300,51 @@
                     ]
                   }
                 }
+              ],
+              "enableCondition": [
+                {
+                  "useTLS": "true"
+                }
+              ]
+            }
+          },
+          {
+            "type": "attributeGroup",
+            "value": {
+              "groupName": "Authorization",
+              "isCollapsed": true,
+              "elements": [
+                {
+                  "type": "attribute",
+                  "value": {
+                    "name": "authorizationType",
+                    "displayName": "Authorization Type",
+                    "inputType": "combo",
+                    "defaultValue": "None",
+                    "required": "false",
+                    "helpTip": "The authorization mechanism to use for authenticating with Pulsar. Supported values: None, JWT, TLS, OAuth2.",
+                    "comboValues": [
+                      "None",
+                      "JWT"
+                    ]
+                  }
+                },
+                {
+                  "type": "attribute",
+                  "value": {
+                    "name": "token",
+                    "displayName": "JWT Token",
+                    "inputType": "stringOrExpression",
+                    "defaultValue": "",
+                    "required": "false",
+                    "helpTip": "The JSON Web Token (JWT) used for authenticating with the Pulsar broker.",
+                    "enableCondition": [
+                      {
+                        "authorizationType": "JWT"
+                      }
+                    ]
+                  }
+                }
               ]
             }
           },
@@ -391,7 +388,7 @@
                         "type": "attribute",
                         "value": {
                           "name": "requestTimeoutMs",
-                          "displayName": "Request Timeout (ms)",
+                          "displayName": "Request Timeout (in milliseconds)",
                           "inputType": "stringOrExpression",
                           "validateType": "number",
                           "defaultValue": "",
@@ -727,7 +724,7 @@
               "name": "subscriptionInitialPosition",
               "displayName": "Subscription Initial Position",
               "inputType": "combo",
-              "defaultValue": "",
+              "defaultValue": "Latest",
               "required": "false",
               "helpTip": "Initial position for the subscription (e.g., Latest, Earliest).",
               "comboValues": [
@@ -742,9 +739,9 @@
               "name": "processingMode",
               "displayName": "Processing Mode",
               "inputType": "combo",
-              "defaultValue": "",
+              "defaultValue": "Sync",
               "required": "false",
-              "helpTip": "Message processing mode (e.g., SYNC, ASYNC).",
+              "helpTip": "Message processing mode (e.g., Sync, Async).",
               "comboValues": [
                 "Sync",
                 "Async"
@@ -792,7 +789,7 @@
               "name": "dlqMaxRedeliverCount",
               "displayName": "DLQ Max Redeliver Count",
               "inputType": "stringOrExpression",
-              "defaultValue": "",
+              "defaultValue": "5",
               "required": "false",
               "validateType": "number",
               "helpTip": "Maximum number of times a message will be redelivered before being sent to the DLQ."
@@ -804,7 +801,7 @@
               "name": "batchReceiveEnabled",
               "displayName": "Receive in Batch",
               "inputType": "boolean",
-              "defaultValue": "",
+              "defaultValue": "true",
               "required": "false",
               "helpTip": "Enable batch receiving of messages."
             }
@@ -866,7 +863,7 @@
               "name": "batchIndexAckEnabled",
               "displayName": "Enable Batch Index Acknowledgment",
               "inputType": "boolean",
-              "defaultValue": "",
+              "defaultValue": "true",
               "required": "false",
               "helpTip": "Enable batch index acknowledgment.",
               "enableCondition": [
@@ -937,7 +934,12 @@
                     "defaultValue": "",
                     "required": "false",
                     "validateType": "number",
-                    "helpTip": "Interval for automatic partition updates (in seconds)."
+                    "helpTip": "Interval for automatic partition updates (in seconds).",
+                    "enableCondition": [
+                      {
+                        "autoUpdatePartitions": "true"
+                      }
+                    ]
                   }
                 },
                 {
@@ -984,17 +986,6 @@
                     "defaultValue": "",
                     "required": "false",
                     "helpTip": "Read messages from the compacted topic."
-                  }
-                },
-                {
-                  "type": "attribute",
-                  "value": {
-                    "name": "cryptoFailureAction",
-                    "displayName": "Crypto Failure Action",
-                    "inputType": "stringOrExpression",
-                    "defaultValue": "",
-                    "required": "false",
-                    "helpTip": "Action to take on crypto failure (e.g., FAIL, DISCARD, CONSUME)."
                   }
                 }
               ]

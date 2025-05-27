@@ -83,7 +83,6 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
     private Integer autoUpdatePartitionsIntervalSeconds;
     private Boolean replicateSubscriptionState;
     private Boolean readCompacted;
-    private String cryptoFailureAction;
     private SortedMap<String, String> properties;
 
     private String processingMode;
@@ -117,7 +116,7 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
                                  long scanInterval, String injectingSeq, String onErrorSeq, boolean coordination,
                                  boolean sequential) {
 
-        super(properties, name, synapseEnvironment, scanInterval, injectingSeq, onErrorSeq, coordination, sequential);
+        super(properties, name, synapseEnvironment, scanInterval, injectingSeq, onErrorSeq, coordination, true);
         configuration = PulsarUtils.getConnectionConfigFromProperties(properties);
         getConsumerConfigFromProperties(properties);
     }
@@ -203,7 +202,6 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
 
     private void processMessageAsync(Message<String> msg) {
         MessageContext msgCtx = PulsarUtils.populateMessageContext(msg, synapseEnvironment);
-
         boolean isConsumed = injectMessage(msg.getValue(), contentType, msgCtx);
 
         if (isConsumed) {
@@ -217,7 +215,6 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
 
     private void processMessage(Message<String> msg) throws PulsarClientException {
         MessageContext msgCtx = PulsarUtils.populateMessageContext(msg, synapseEnvironment);
-
         boolean isConsumed = injectMessage(msg.getValue(), contentType, msgCtx);
 
         if (isConsumed) {
@@ -470,8 +467,6 @@ public class PulsarMessageConsumer extends GenericPollingConsumer {
         String readCompactedStr = properties.getProperty(PulsarConstants.READ_COMPACTED);
         this.readCompacted = readCompactedStr != null && !readCompactedStr.isEmpty()
                 && Boolean.parseBoolean(readCompactedStr);
-
-        this.cryptoFailureAction = properties.getProperty(PulsarConstants.CRYPTO_FAILURE_ACTION);
 
         String batchReceiveEnabledStr = properties.getProperty(PulsarConstants.BATCH_RECEIVE_ENABLED);
         this.batchReceiveEnabled = batchReceiveEnabledStr != null && !batchReceiveEnabledStr.isEmpty()

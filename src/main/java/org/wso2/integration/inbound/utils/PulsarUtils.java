@@ -1,5 +1,8 @@
 package org.wso2.integration.inbound.utils;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.pulsar.client.api.Message;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseException;
@@ -10,6 +13,7 @@ import org.wso2.integration.inbound.pojo.JWTAuthConfig;
 import org.wso2.integration.inbound.pojo.PulsarConnectionConfig;
 import org.wso2.integration.inbound.pojo.PulsarSecureConnectionConfig;
 
+import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 
@@ -116,12 +120,11 @@ public class PulsarUtils {
      */
     public static MessageContext populateMessageContext(Message<String> msg, SynapseEnvironment synapseEnvironment) {
         MessageContext msgCtx = createMessageContext(synapseEnvironment);
-        msgCtx.setProperty("topic", msg.getTopicName());
-        msgCtx.setProperty("msgId", msg.getMessageId());
-        msgCtx.setProperty("value", msg.getValue());
-        msgCtx.setProperty("key", msg.getKey());
-        msgCtx.setProperty("redeliveryCount", msg.getRedeliveryCount());
-        msgCtx.setProperty("properties", msg.getProperties());
+        msgCtx.setProperty(PulsarConstants.TOPIC_NAMES, msg.getTopicName());
+        msgCtx.setProperty(PulsarConstants.MSG_ID, msg.getMessageId());
+        msgCtx.setProperty(PulsarConstants.KEY, msg.getKey());
+        msgCtx.setProperty(PulsarConstants.REDELIVERY_COUNT, msg.getRedeliveryCount());
+        msgCtx.setProperty(PulsarConstants.PROPERTIES, convertPropertiesToJsonArray(msg.getProperties()).toString());
 
         return msgCtx;
     }
@@ -136,6 +139,21 @@ public class PulsarUtils {
         axis2MsgCtx.setServerSide(true);
         axis2MsgCtx.setMessageID(String.valueOf(UUID.randomUUID()));
         return msgCtx;
+    }
+
+    public static ArrayNode convertPropertiesToJsonArray(Map<String, String> properties) {
+        ObjectMapper mapper = new ObjectMapper();
+        ArrayNode arrayNode = mapper.createArrayNode();
+
+        if (properties != null) {
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                ObjectNode obj = mapper.createObjectNode();
+                obj.put(entry.getKey(), entry.getValue());
+                arrayNode.add(obj);
+            }
+        }
+
+        return arrayNode;
     }
 
 }

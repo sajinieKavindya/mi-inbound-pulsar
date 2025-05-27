@@ -87,8 +87,6 @@ public class PulsarConstants {
     public static final String AUTO_UPDATE_PARTITIONS_INTERVAL_SECONDS = "autoUpdatePartitionsIntervalSeconds";
     public static final String REPLICATE_SUBSCRIPTION_STATE = "replicateSubscriptionState";
     public static final String READ_COMPACTED = "readCompacted";
-    public static final String CRYPTO_FAILURE_ACTION = "cryptoFailureAction";
-
 
     public static final String CONSUMER_NAME = "consumerName";
     public static final String PRIORITY_LEVEL = "priorityLevel";
@@ -105,5 +103,8 @@ public class PulsarConstants {
     public static final String SYNC = "SYNC";
 
     public static final String PROPERTIES = "properties";
+    public static final String MSG_ID = "msgId";
+    public static final String KEY = "key";
+    public static final String REDELIVERY_COUNT = "redeliveryCount";
 
 }
